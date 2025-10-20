@@ -1,4 +1,4 @@
-<!DOCTYPE html><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
@@ -109,6 +109,36 @@
       position: absolute; top: 50%; left: 50%;
     }
     model-viewer[ar-status="session-started"] #reticle { display: block; }
+      /* サムネイル&コントロール */
+    .thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
+    .thumb { width: 88px; height: 88px; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.08); background: #0b1220; cursor: pointer; display:grid; place-items:center; }
+    .thumb img { max-width: 100%; max-height: 100%; opacity: .9; }
+    .thumb.active { outline: 2px solid var(--accent); }
+    .controls { display: grid; gap: 8px; }
+    .controls label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--muted); }
+    .controls input[type="range"] { width: 180px; }
+    .controls .row { gap: 6px; }
+
+    /* コンフェッティ */
+    .confetti { position: fixed; top: -10px; width: 8px; height: 14px; opacity: 0.9; transform: rotate(0deg); will-change: transform, top, opacity; }
+    .confetti.anim { animation: fall 900ms ease-out forwards; }
+    @keyframes fall { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(110vh) rotate(540deg); opacity: 0; } }
+
+      /* レティクル（円グリッド風） */
+    #reticle {
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      border: 2px dashed rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 6px rgba(255,255,255,0.08) inset, 0 0 30px rgba(0,0,0,0.35);
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,0.25) 0 2px, transparent 2px 100%),
+        repeating-conic-gradient(from 0deg, rgba(255,255,255,0.08) 0 10deg, transparent 10deg 20deg);
+      display: none;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      position: absolute; top: 50%; left: 50%;
+    }
+    model-viewer[ar-status="session-started"] #reticle { display: block; }
   </style>
 </head>
 <body>
@@ -126,17 +156,7 @@
           ios-src: iOS Quick Look用（usdz）
           ar-modes: 可能なAR起動手段を列挙
         -->
-        <model-viewer id="viewer"
-          src=""
-          ios-src=""
-          ar
-          ar-modes="webxr scene-viewer quick-look"
-          ar-placement="floor"
-          camera-controls
-          auto-rotate
-          shadow-intensity="1"
-          exposure="1.0"
-          alt="3Dモデルのプレビュー">
+        <model-viewer id="viewer"$1environment-image="https://modelviewer.dev/shared-assets/environments/spruit_sunrise_1k_HDR.hdr" alt="3Dモデルのプレビュー">
 
           <!-- model-viewer 内のARボタン（フォールバック） -->
           <button slot="ar-button" class="button">📱 ARで表示</button>
@@ -166,6 +186,18 @@
             🖥️ デスクトップ→スマホ
           </button>
         </div>
+
+        <!-- 楽しむ：モデル切替 & 見栄え調整 -->
+        <div style="margin:10px 0 6px; font-weight:700">モデルを選ぶ</div>
+        <div id="presets" class="thumbs"></div>
+
+        <div style="margin:12px 0 6px; font-weight:700">ライティング</div>
+        <div class="controls">
+          <label>露出 <input id="ctrl-exposure" type="range" min="0.2" max="2.0" step="0.05" value="1.0"></label>
+          <label>影の濃さ <input id="ctrl-shadow" type="range" min="0" max="2" step="0.05" value="1"></label>
+          <label class="row"><input id="ctrl-autorotate" type="checkbox" checked> 自動回転</label>
+        </div>
+
         <div id="qr" class="qr-wrap">
           <div class="qr-box"><div id="qrcode"></div></div>
           <div>
@@ -328,21 +360,81 @@
       }
     })();
 
-    // --- WebXR簡易「スポット置き」: ユーザーのタップ位置にレティクルを瞬間的にスナップ表示 ---
-    // ※ model-viewerのヒットテスト結果に合わせた本格配置はネイティブのレティクルに依存します。
-    //   ここでは視覚補助として、タップ直後にレティクルを"スポン"と拡大→減衰表示します。
+    // --- WebXR簡易「スポット置き」 + 演出 ---
     const reticle = document.getElementById('reticle');
-    let tapAnim;
+
+    function haptic() { if (navigator.vibrate) navigator.vibrate(15); }
+
+    function playBeep() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'triangle'; o.frequency.value = 660; g.gain.value = 0.05;
+        o.connect(g); g.connect(ctx.destination); o.start();
+        setTimeout(() => { o.stop(); ctx.close(); }, 120);
+      } catch (e) {}
+    }
+
+    function spawnConfetti(n=24) {
+      for (let i=0;i<n;i++) {
+        const el = document.createElement('div');
+        el.className = 'confetti anim';
+        const hue = Math.floor(Math.random()*360);
+        el.style.background = `hsl(${hue} 90% 60%)`;
+        el.style.left = (Math.random()*100)+'vw';
+        el.style.animationDelay = (Math.random()*0.2)+'s';
+        el.style.transform = `rotate(${Math.random()*360}deg)`;
+        document.body.appendChild(el);
+        setTimeout(()=> el.remove(), 1000);
+      }
+    }
+
     function popReticle() {
       if (!reticle || viewer.getAttribute('ar-status') !== 'session-started') return;
       reticle.animate([
         { transform: 'translate(-50%, -50%) scale(0.6)', opacity: 0.0 },
         { transform: 'translate(-50%, -50%) scale(1.0)', opacity: 1.0, offset: 0.5 },
         { transform: 'translate(-50%, -50%) scale(1.0)', opacity: 0.0 }
-      ], { duration: 450, easing: 'ease-out' });
+      ], { duration: 420, easing: 'ease-out' });
+      haptic();
+      playBeep();
+      spawnConfetti(18);
     }
 
     viewer.addEventListener('click', () => popReticle());
+
+    // --- モデルプリセット（プレビュー/Android向けGLB。iOSはローカルUSDZを優先） ---
+    const presets = [
+      { name:'Astronaut', glb:'https://modelviewer.dev/shared-assets/models/Astronaut.glb', thumb:'https://modelviewer.dev/shared-assets/thumbnails/Astronaut.webp' },
+      { name:'Robot', glb:'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb', thumb:'https://modelviewer.dev/shared-assets/thumbnails/RobotExpressive.webp' },
+      { name:'Horse', glb:'https://modelviewer.dev/shared-assets/models/Horse.glb', thumb:'https://modelviewer.dev/shared-assets/thumbnails/Horse.webp' }
+    ];
+
+    const $presets = document.getElementById('presets');
+    const presetEls = presets.map((p, idx) => {
+      const b = document.createElement('button');
+      b.className = 'thumb'+(idx===0?' active':'');
+      b.title = p.name;
+      const img = document.createElement('img'); img.src = p.thumb; img.alt = p.name; b.appendChild(img);
+      b.addEventListener('click', () => {
+        presetEls.forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        viewer.setAttribute('src', p.glb);
+        // AndroidのScene Viewerも更新
+        const updated = buildSceneViewerUrl({ file: p.glb, mode:'ar_only', title: document.title || p.name, link: location.href });
+        btnAndroid.href = updated;
+      });
+      $presets.appendChild(b); return b;
+    });
+
+    // --- 露出/影/回転コントロール ---
+    const ctrlExposure = document.getElementById('ctrl-exposure');
+    const ctrlShadow = document.getElementById('ctrl-shadow');
+    const ctrlAuto = document.getElementById('ctrl-autorotate');
+    ctrlExposure.addEventListener('input', () => viewer.setAttribute('exposure', ctrlExposure.value));
+    ctrlShadow.addEventListener('input', () => viewer.setAttribute('shadow-intensity', ctrlShadow.value));
+    ctrlAuto.addEventListener('change', () => ctrlAuto.checked ? viewer.setAttribute('auto-rotate','') : viewer.removeAttribute('auto-rotate'));
 
     // 補足: 本当に平面に沿ってレティクル(メッシュ)を表示し、タップで確定配置したい場合は
     // three.js + WebXR Hit Test API での実装に切り替える必要があります。
