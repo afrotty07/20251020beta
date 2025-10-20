@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebARデモ（iOS Quick Look / Android Scene Viewer / Desktopプレビュー）</title>
+    <!-- 説明:
+    - iOS: Quick Look (USDZ)
+    - Android: Scene Viewer (GLB/GLTF)
+    - Desktop: 3Dプレビュー + QRコードでスマホへ
+    - 可能なら <model-viewer> による3Dプレビュー/AR起動
+  -->
+
+    <!-- 3Dプレビュー用（Google model-viewer）
+       公式: https://modelviewer.dev/  -->
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <script nomodule src="https://unpkg.com/@google/model-viewer/dist/model-viewer-legacy.js"></script>
+
+    <!-- Desktop→スマホ遷移用のQRコード（軽量ライブラリ） -->
+    <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+    <!-- 事前読み込み（任意） -->
+    <link rel="preload" href="./model.usdz" as="fetch" crossorigin>
+    <link rel="preload" href="./model.glb" as="fetch" crossorigin>
+
+    <style>
+        :root {
+            --bg: #0b0f1a;
+            --card: #111827;
+            --muted: #9ca3af;
+            --accent: #3b82f6;
+            --text: #e5e7eb;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, sans-serif;
+            background: radial-gradient(1200px 600px at 70% -10%, #0f172a 0%, var(--bg) 60%);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .wrap {
+            width: 100%;
+            max-width: 980px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            font-size: clamp(22px, 4vw, 32px);
+            margin: 0 0 8px;
+        }
+
+        p.lead {
+            color: var(--muted);
+            margin: 0;
+        }
+
+        .grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: 1fr;
+        }
+
+        @media (min-width: 960px) {
+            .grid {
+                grid-template-columns: 2fr 1fr;
+            }
+        }
+
+        .card {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+            overflow: hidden;
+        }
+
+        model-viewer {
+            width: 100%;
+            height: 56vh;
+            min-height: 360px;
+            background: #0a0e1a;
+        }
+
+        .panel {
+            padding: 16px;
+        }
+
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .button,
+        a.button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-weight: 600;
+            background: var(--accent);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: transform .06s ease, filter .15s ease;
+        }
+
+        .button.secondary {
+            background: #334155;
+        }
+
+        .button.ghost {
+            background: transparent;
+            border: 1px solid #334155;
+        }
+
+        .button:hover {
+            filter: brightness(1.08);
+        }
+
+        .button:active {
+            transform: translateY(1px);
+        }
+
+        .hint {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 8px;
+        }
+
+        .qr-wrap {
+            display: none;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .qr-box {
+            width: 140px;
+            height: 140px;
+            padding: 8px;
+            border-radius: 12px;
+            background: white;
+            display: grid;
+            place-items: center;
+        }
+
+        footer {
+            margin-top: 18px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        code {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <header>
+            <h1>ARで見る</h1>
+            <p class="lead">iOS / Android / Desktop どれでもOK。まずはプレビュー、端末に応じて最適なARを起動します。</p>
+        </header>
+
+        <div class="grid">
+            <!-- 左: 3Dプレビュー -->
+            <div class="card">
+                <!--
+          src: Android/デスクトップ用（glb/gltf）
+          ios-src: iOS Quick Look用（usdz）
+          ar-modes: 可能なAR起動手段を列挙
+        -->
+                <model-viewer id="viewer" src="./model.glb" ios-src="./model.usdz" ar
+                    ar-modes="quick-look scene-viewer webxr" camera-controls auto-rotate shadow-intensity="1"
+                    exposure="1.0" alt="3Dモデルのプレビュー">
+
+                    <!-- model-viewer 内のARボタン（フォールバック） -->
+                    <button slot="ar-button" class="button">📱 ARで表示</button>
+                    <div class="hint" slot="poster">読み込み中…</div>
+                </model-viewer>
+            </div>
+
+            <!-- 右: 操作パネル -->
+            <div class="card panel">
+                <h2 style="margin-top:0">端末に合わせてAR起動</h2>
+                <div class="buttons" style="margin-bottom:8px">
+                    <!-- iOS Quick Look: a[rel=ar] が最短 -->
+                    <a id="btn-ios" class="button" rel="ar" href="./model.usdz" title="iPhone / iPad 用">
+                         iPhone / iPad でAR
+                    </a>
+
+                    <!-- Android Scene Viewer: intent URLを生成 -->
+                    <a id="btn-android" class="button secondary" href="#" title="Android 用">
+                        🤖 AndroidでAR
+                    </a>
+
+                    <!-- デスクトップ: QRコード or 共有リンク -->
+                    <button id="btn-desktop" class="button ghost" title="デスクトップ向け">
+                        🖥️ デスクトップ→スマホ
+                    </button>
+                </div>
+                <div id="qr" class="qr-wrap">
+                    <div class="qr-box">
+                        <div id="qrcode"></div>
+                    </div>
+                    <div>
+                        <div>スマホのカメラでQRを読み取って、このページを開いてください。</div>
+                        <div class="hint">同じWi‑Fiでない場合は、ホスティングURLが外部から到達可能である必要があります。</div>
+                    </div>
+                </div>
+
+                <hr style="border-color: rgba(255,255,255,0.06); margin:16px 0;">
+                <details>
+                    <summary>セットアップメモ</summary>
+                    <ul style="margin:8px 0 0 16px; color: var(--muted); font-size: 14px;">
+                        <li><code>./model.usdz</code>（iOS向け）と<code>./model.glb</code>（Android/プレビュー向け）を同じディレクトリに配置。</li>
+                        <li>AndroidのScene ViewerはHTTPSかつ公開URL推奨。ローカルの場合はUSBデバッグから開発者オプション等で検証。</li>
+                        <li>Quick Lookの挙動（固定スケール等）はUSDZ側の設定に依存します。</li>
+                    </ul>
+                </details>
+            </div>
+        </div>
+
+        <footer>
+            <span>AR起動がうまくいかない時は、端末のOS/ブラウザの最新版をお試しください。</span>
+        </footer>
+    </div>
+
+    <script>
+        // --- ユーティリティ: 端末判定 ---
+        const ua = navigator.userAgent || navigator.vendor || window.opera;
+        const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isAndroid = /Android/.test(ua);
+
+        // --- 要素参照 ---
+        const btnIOS = document.getElementById('btn-ios');
+        const btnAndroid = document.getElementById('btn-android');
+        const btnDesktop = document.getElementById('btn-desktop');
+        const qrWrap = document.getElementById('qr');
+
+        // --- Android Scene Viewer intent URLを構築 ---
+        function buildSceneViewerUrl(params) {
+            const base = 'https://arvr.google.com/scene-viewer/1.0';
+            const url = new URL(base);
+            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+            return url.toString();
+        }
+
+        // ここは公開URLに差し替えてください（同一オリジン推奨）
+        const glbUrl = new URL('./model.glb', location.href).toString();
+
+        // Androidボタンのhrefを設定
+        const sceneViewerURL = buildSceneViewerUrl({
+            file: glbUrl,
+            mode: 'ar_only',
+            title: document.title || 'WebAR Model',
+            // link パラメータで戻り先（任意）
+            link: location.href
+        });
+        btnAndroid.href = sceneViewerURL;
+
+        // --- 端末別にデフォルトボタンを強調表示 ---
+        if (isIOS) {
+            btnIOS.classList.remove('secondary', 'ghost');
+        } else if (isAndroid) {
+            btnAndroid.classList.remove('secondary');
+            btnAndroid.classList.add('button');
+        } else {
+            btnDesktop.classList.remove('ghost');
+            btnDesktop.classList.add('button');
+        }
+
+        // --- Desktop: QRコード表示/非表示 ---
+        let qrRendered = false;
+        btnDesktop?.addEventListener('click', () => {
+            qrWrap.style.display = qrWrap.style.display === 'flex' ? 'none' : 'flex';
+            if (!qrRendered) {
+                // 現在のページURLをQR化
+                // 外部からアクセスできるURLでホストしてください
+                new QRCode(document.getElementById('qrcode'), {
+                    text: location.href,
+                    width: 120,
+                    height: 120,
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+                qrRendered = true;
+            }
+        });
+
+        // --- Web Share API（対応ブラウザのみ）---
+        if (navigator.share) {
+            const shareBtn = document.createElement('button');
+            shareBtn.textContent = '📤 共有';
+            shareBtn.className = 'button ghost';
+            shareBtn.style.marginLeft = '8px';
+            shareBtn.addEventListener('click', async () => {
+                try {
+                    await navigator.share({ title: document.title, url: location.href });
+                } catch (e) { /* キャンセルなど */ }
+            });
+            document.querySelector('.buttons').appendChild(shareBtn);
+        }
+
+        // --- ちょい上級: iOSでの即時Quick Look起動（任意） ---
+        // ページ表示と同時に起動したい場合などは以下を活用（UXに注意）
+        // if (isIOS) {
+        //   const a = document.createElement('a');
+        //   a.setAttribute('rel', 'ar');
+        //   a.setAttribute('href', './model.usdz');
+        //   a.style.display = 'none';
+        //   document.body.appendChild(a);
+        //   a.click();
+        //   a.remove();
+        // }
+    </script>
+</body>
+
+</html>
