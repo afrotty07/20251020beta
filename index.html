@@ -1,10 +1,4 @@
-const params = new URLSearchParams(location.search);
-    const defaultGLB = 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
-    const localUSDZ = new URL('./model.usdz', location.href).toString();
-    const fallbackUSDZDemo = 'https://modelviewer.dev/shared-assets/models/Astronaut.usdz';
-    const glbUrl = params.get('glb') || defaultGLB;
-    // iPhoneではまずローカル model.usdz を使う（なければ後でデモにフォールバック）
-    let usdzUrl = params.get('usdz') || localUSDZ;<!DOCTYPE html>
+<!DOCTYPE html><!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
@@ -221,9 +215,11 @@ const params = new URLSearchParams(location.search);
     // クエリパラメータでモデル差し替え可能: ?glb=...&usdz=...
     const params = new URLSearchParams(location.search);
     const defaultGLB = 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
-    const defaultUSDZ = 'https://modelviewer.dev/shared-assets/models/Astronaut.usdz';
+    const localUSDZ = new URL('./model.usdz', location.href).toString();
+    const fallbackUSDZDemo = 'https://modelviewer.dev/shared-assets/models/Astronaut.usdz';
     const glbUrl = params.get('glb') || defaultGLB;
-    const usdzUrl = params.get('usdz') || defaultUSDZ;
+    // iPhone/iPadではまずローカル model.usdz を使う（指定があれば ?usdz=... を優先）
+    let usdzUrl = params.get('usdz') || localUSDZ;
 
     // model-viewerへ反映
     const viewer = document.getElementById('viewer');
