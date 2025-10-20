@@ -1,4 +1,10 @@
-<!DOCTYPE html>
+const params = new URLSearchParams(location.search);
+    const defaultGLB = 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+    const localUSDZ = new URL('./model.usdz', location.href).toString();
+    const fallbackUSDZDemo = 'https://modelviewer.dev/shared-assets/models/Astronaut.usdz';
+    const glbUrl = params.get('glb') || defaultGLB;
+    // iPhoneではまずローカル model.usdz を使う（なければ後でデモにフォールバック）
+    let usdzUrl = params.get('usdz') || localUSDZ;<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
@@ -21,7 +27,7 @@
 
   <!-- 事前読み込み（任意） -->
   <!-- 事前読み込み（任意）: デフォルトの公開デモモデルをpreload -->
-  <link rel="preload" href="https://modelviewer.dev/shared-assets/models/Astronaut.usdz" as="fetch" crossorigin>
+  <link rel="preload" href="./model.usdz" as="fetch" crossorigin>
   <link rel="preload" href="https://modelviewer.dev/shared-assets/models/Astronaut.glb" as="fetch" crossorigin>
 
   <style>
@@ -303,7 +309,17 @@
 
     (async () => {
       const okGLB = await assertReachable(glbUrl);
-      const okUSDZ = await assertReachable(usdzUrl);
+      let okUSDZ = await assertReachable(usdzUrl);
+
+      // iOS優先: ローカルUSDZが無い場合はデモに自動フォールバック
+      if (isIOS && !okUSDZ) {
+        console.warn('local USDZ not found. Falling back to demo USDZ.');
+        usdzUrl = fallbackUSDZDemo;
+        viewer.setAttribute('ios-src', usdzUrl);
+        btnIOS.href = usdzUrl;
+        okUSDZ = await assertReachable(usdzUrl);
+      }
+
       const warn = [];
       if (!okGLB) warn.push('GLB');
       if (!okUSDZ) warn.push('USDZ');
@@ -311,7 +327,7 @@
         const el = document.createElement('div');
         el.role = 'status';
         el.style.cssText = 'margin-top:8px;color:#fca5a5;font-size:12px;';
-        el.textContent = `${warn.join(' / ')} の取得に失敗しました。URLを確認してください。`;
+        el.textContent = `${warn.join(' / ')} の取得に失敗しました。URLまたはホスティングの設定（MIME type含む）を確認してください。`;
         document.querySelector('.panel').appendChild(el);
       }
     })();
